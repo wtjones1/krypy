@@ -556,21 +556,21 @@ class Cg(_KrylovSolver):
         self.MMlrk = self.MMlr0.copy()
 
         # search direction
-        p = self._augment_residual(self.MMlrk.copy(),self.yk)
+        p = self._augment_residual(self.MMlrk.copy(),yk)
         self.iter = 0
 
         # store Lanczos vectors + matrix?
         if self.store_arnoldi:
             self.V = numpy.zeros((O, self.maxiter+1), dtype=self.dtype)
             if self.MMlr0_norm > 0:
-                self.V[:, [0]] = self._augment_residual(self.MMlr0/self.MMlr0_norm,
-                                                   yk)
+                self.V[:, [0]] = \
+                    self._augment_residual(self.MMlr0/self.MMlr0_norm, yk)
             if not isinstance(self.linear_system.M,
                               utils.IdentityLinearOperator):
                 self.P = numpy.zeros((O, self.maxiter+1), dtype=self.dtype)
                 if self.MMlr0_norm > 0:
-                    self.P[:, [0]] = self._augment_residual(self.Mlr0/self.MMlr0_norm,
-                                                       yk)
+                    self.P[:, [0]] = \
+                        self._augment_residual(self.Mlr0/self.MMlr0_norm, yk)
             self.H = numpy.zeros((self.maxiter+1, self.maxiter))  # real
             alpha_old = 0  # will be set at end of iteration
 
@@ -579,7 +579,8 @@ class Cg(_KrylovSolver):
             k = self.iter
             if k > 0:
                 # update the search direction
-                p = self._augment_residual(self.MMlrk,yk) + rhos[-1]/rhos[-2] * p
+                p = self._augment_residual(self.MMlrk,yk) + \
+                    rhos[-1]/rhos[-2] * p
                 if self.store_arnoldi:
                     omega = rhos[-1]/rhos[-2]
             # apply operators
@@ -623,10 +624,10 @@ class Cg(_KrylovSolver):
 
             # compute Lanczos vector + new subdiagonal element
             if self.store_arnoldi:
-                self.V[:, [k+1]] = (-1)**(k+1) * self._augment_residual(self.MMlrk) / MMlrk_norm
+                self.V[:, [k+1]] = (-1)**(k+1) * self._augment_residual(self.MMlrk, yk) / MMlrk_norm
                 if not isinstance(self.linear_system.M,
                                   utils.IdentityLinearOperator):
-                    self.P[:, [k+1]] = (-1)**(k+1) * self._augment_residual(self.Mlrk) / MMlrk_norm
+                    self.P[:, [k+1]] = (-1)**(k+1) * self._augment_residual(self.Mlrk, yk) / MMlrk_norm
                 self.H[k+1, k] = numpy.sqrt(rhos[-1]/rhos[-2]) / alpha
                 alpha_old = alpha
 
