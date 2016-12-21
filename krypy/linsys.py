@@ -556,7 +556,7 @@ class Cg(_KrylovSolver):
         self.MMlrk = self.MMlr0.copy()
 
         # search direction
-        p = _self.augment_residual(self.MMlrk.copy(),self.yk)
+        p = self._augment_residual(self.MMlrk.copy(),self.yk)
         self.iter = 0
 
         # store Lanczos vectors + matrix?
