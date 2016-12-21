@@ -258,8 +258,7 @@ class _KrylovSolver(object):
                  maxiter=None,
                  explicit_residual=False,
                  store_arnoldi=False,
-                 dtype=None,
-                 callback=None
+                 dtype=None
                  ):
         r'''Init standard attributes and perform checks.
 
@@ -299,9 +298,6 @@ class _KrylovSolver(object):
         :param dtype: (optional)
           an optional dtype that is used to determine the dtype for the
           Arnoldi/Lanczos basis and matrix.
-        :param callback: (optional)
-          User-supplied function to call after each iteration. It is called
-          as callback(xk), where xk is the current solution vector.
 
         Upon convergence, the instance contains the following attributes:
 
@@ -328,7 +324,6 @@ class _KrylovSolver(object):
         self.flat_vecs, (self.x0,) = utils.shape_vecs(x0)
         self.explicit_residual = explicit_residual
         self.store_arnoldi = store_arnoldi
-        self.callback = callback
 
         # get initial guess
         self.x0 = self._get_initial_guess(self.x0)
@@ -406,8 +401,9 @@ class _KrylovSolver(object):
         '''
         (N, O) = self.linear_system.A.shape
         if z is None:
-            return numpy.append(r,numpy.zeros(O-N,dtype=r.dtype))
-        return numpy.append(r,z[N:])
+            return utils.shape_vec(
+                       numpy.append(r,numpy.zeros(O-N,dtype=r.dtype)))
+        return utils.shape_vec(numpy.append(r,z[N:]))
 
     def _get_xk(self, yk):
         '''Compute approximate solution from initial guess and approximate
@@ -428,11 +424,6 @@ class _KrylovSolver(object):
             self.errnorms.append(utils.norm(
                 self.linear_system.exact_solution - self.xk,
                 ip_B=self.linear_system.ip_B))
-
-        if self.callback is not None:
-            if self.xk is None:
-                self.xk = self._get_xk(yk)
-            self.callback(self.xk)
 
         rkn = None
 
