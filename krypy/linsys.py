@@ -148,7 +148,14 @@ class LinearSystem(object):
             if compute_norm:
                 return self.MMlb, self.Mlb, self.MMlb_norm
             return self.MMlb, self.Mlb
-        r = self.b - self.A*z
+
+        (N, O) = self.A.shape
+        if len(z) == O:
+          _z = z
+        else:
+          _z = utils.shape_vec(numpy.append(z, numpy.zeros(O-N, dtype=z.dtype)))
+
+        r = self.b - self.A*_z
         Mlr = self.Ml*r
         MMlr = self.M*Mlr
         if compute_norm:
@@ -334,7 +341,7 @@ class _KrylovSolver(object):
 
         # sanitize initial guess
         if self.x0 is None:
-            self.x0 = numpy.zeros((O, 1))
+            self.x0 = numpy.zeros((N, 1))
         self.tol = tol
 
         self.xk = None
@@ -358,7 +365,7 @@ class _KrylovSolver(object):
 
         # if rhs is exactly(!) zero, return zero solution.
         if self.linear_system.MMlb_norm == 0:
-            self.xk = self.x0 = numpy.zeros((O, 1))
+            self.xk = self.x0 = numpy.zeros((N, 1))
             self.resnorms.append(0.)
         else:
             # initial relative residual norm
@@ -392,24 +399,12 @@ class _KrylovSolver(object):
         '''
         return self.linear_system.get_residual(x0, compute_norm=True)
 
-    def _augment_residual(self, r, z):
-        r'''Augment the residual vector with additional solution terms for
-        partitioned system.
-
-        :param r: current residual ``r.shape == (N, 1)``.
-        :param z: approximate solution with ``z.shape == (O, 1)``.
-        '''
-        (N, O) = self.linear_system.A.shape
-        if z is None:
-            return utils.shape_vec(
-                       numpy.append(r,numpy.zeros(O-N,dtype=r.dtype)))
-        return utils.shape_vec(numpy.append(r,z[N:]))
-
     def _get_xk(self, yk):
         '''Compute approximate solution from initial guess and approximate
         solution of the preconditioned linear system.'''
         if yk is not None:
-            return self.x0 + self.linear_system.Mr * yk
+            N = self.linear_system.N
+            return self.x0 + (self.linear_system.Mr * yk)[:N]
         return self.x0
 
     def _finalize_iteration(self, yk, resnorm):
@@ -556,21 +551,19 @@ class Cg(_KrylovSolver):
         self.MMlrk = self.MMlr0.copy()
 
         # search direction
-        p = self._augment_residual(self.MMlrk.copy(),yk)
+        p = self.MMlrk.copy()
         self.iter = 0
 
         # store Lanczos vectors + matrix?
         if self.store_arnoldi:
-            self.V = numpy.zeros((O, self.maxiter+1), dtype=self.dtype)
+            self.V = numpy.zeros((N, self.maxiter+1), dtype=self.dtype)
             if self.MMlr0_norm > 0:
-                self.V[:, [0]] = \
-                    self._augment_residual(self.MMlr0/self.MMlr0_norm, yk)
+                self.V[:, [0]] = self.MMlr0/self.MMlr0_norm
             if not isinstance(self.linear_system.M,
                               utils.IdentityLinearOperator):
-                self.P = numpy.zeros((O, self.maxiter+1), dtype=self.dtype)
+                self.P = numpy.zeros((N, self.maxiter+1), dtype=self.dtype)
                 if self.MMlr0_norm > 0:
-                    self.P[:, [0]] = \
-                        self._augment_residual(self.Mlr0/self.MMlr0_norm, yk)
+                    self.P[:, [0]] = self.Mlr0/self.MMlr0_norm
             self.H = numpy.zeros((self.maxiter+1, self.maxiter))  # real
             alpha_old = 0  # will be set at end of iteration
 
@@ -579,15 +572,14 @@ class Cg(_KrylovSolver):
             k = self.iter
             if k > 0:
                 # update the search direction
-                p = self._augment_residual(self.MMlrk,yk) + \
-                    rhos[-1]/rhos[-2] * p
+                p = self.MMlrk + rhos[-1]/rhos[-2] * p
                 if self.store_arnoldi:
                     omega = rhos[-1]/rhos[-2]
             # apply operators
             Ap = self.MlAMr*p
 
             # compute inner product
-            alpha = rhos[-1] / utils.inner(p[:N], Ap,
+            alpha = rhos[-1] / utils.inner(p, Ap,
                                            ip_B=self.linear_system.ip_B)[0, 0]
 
             # check if alpha is real
@@ -624,10 +616,10 @@ class Cg(_KrylovSolver):
 
             # compute Lanczos vector + new subdiagonal element
             if self.store_arnoldi:
-                self.V[:, [k+1]] = (-1)**(k+1) * self._augment_residual(self.MMlrk, yk) / MMlrk_norm
+                self.V[:, [k+1]] = (-1)**(k+1) * self.MMlrk / MMlrk_norm
                 if not isinstance(self.linear_system.M,
                                   utils.IdentityLinearOperator):
-                    self.P[:, [k+1]] = (-1)**(k+1) * self._augment_residual(self.Mlrk, yk) / MMlrk_norm
+                    self.P[:, [k+1]] = (-1)**(k+1) * self.Mlrk / MMlrk_norm
                 self.H[k+1, k] = numpy.sqrt(rhos[-1]/rhos[-2]) / alpha
                 alpha_old = alpha
 
@@ -728,7 +720,7 @@ class Minres(_KrylovSolver):
 
         # initialize Lanczos
         self.lanczos = utils.Arnoldi(self.MlAMr,
-                                     self._augment_residual(self.Mlr0,self.x0),
+                                     self.Mlr0,
                                      maxiter=self.maxiter,
                                      ortho=self.ortho,
                                      M=self.linear_system.M,
@@ -860,7 +852,7 @@ class Gmres(_KrylovSolver):
     def _solve(self):
         # initialize Arnoldi
         self.arnoldi = utils.Arnoldi(self.MlAMr,
-                                     self._augment_residual(self.Mlr0,self.x0),
+                                     self.Mlr0,
                                      maxiter=self.maxiter,
                                      ortho=self.ortho,
                                      M=self.linear_system.M,
